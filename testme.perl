@@ -168,23 +168,26 @@ sub testx2 {
 ## Generation
 
 sub testga1 {
-  our $ngenes = 50;
-  our $popsize = 10;
+  our $ngenes = 50 if (!defined($ngenes));
 
-  our $mutate_rate = 0.01;
-  #our $mutate_rate = 0.1;
-  #our $mutate_rate = 0.25;
+  #our $popsize = 10 if (!defined($popsize));
+  our $popsize = 100 if (!defined($popsize));
 
-  our $xover_rate  = 0.95;
+  our $mutateRate = 0.01 if (!defined($mutateRate));
+  #our $mutateRate = 0.1 if (!defined($mutateRate));
+  #our $mutateRate = 0.25 if (!defined($mutateRate));
+
+  our $xoverRate  = 0.95 if (!defined($xoverRate));
 
   #our $pop = mutate_bool(zeroes(byte,$ngenes,$popsize), 0.5);
-  our $pop = xvals(byte,$ngenes,$popsize) < yvals(byte,$ngenes,$popsize);
+  #our $pop = xvals(byte,$ngenes,$popsize) < yvals(byte,$ngenes,$popsize);
   #our $pop = mutate_bool(zeroes(byte,$ngenes,$popsize), 0.25);
+  our $pop = mutate_bool(zeroes(byte,$ngenes,$popsize), 0.1);
   #our $pop = zeroes(byte,$ngenes,$popsize);
   our $ga = {
 	     pop=>$pop,
-	     mutateRate=>$mutate_rate,
-	     xoverRate=>$xover_rate,
+	     mutateRate=>$mutateRate,
+	     xoverRate=>$xoverRate,
 	     ##
 	     fitnessSub=>sub {
 	       return $_[0]{pop}->sumover;
@@ -204,6 +207,80 @@ sub testga1 {
 	     },
 	    };
 }
+
+sub testga2 {
+  our $ngenes = 50 if (!defined($ngenes));
+  our $popsize = 100 if (!defined($popsize));
+
+  our $mutateRate = 0.01;
+  #our $mutateRate = 0.1;
+  #our $mutateRate = 0.25;
+
+  our $xoverRate  = 0.95;
+
+  our $pop = mutate_range(zeroes(byte,$ngenes,$popsize), 1.0, 0,$ngenes);
+  our $ga = {
+	     pop=>$pop,
+	     mutateRate=>$mutateRate,
+	     xoverRate=>$xoverRate,
+	     ##
+	     fitnessSub=>sub {
+	       my $pop = $_[0]{pop};
+	       return ((1+abs(sequence($ngenes)->slice(",*$popsize") - $pop))**-1)->sumover
+	     },
+	     mutateSub=>sub {
+	       my $ga = shift;
+	       mutate_range($ga->{pop}->inplace, $ga->{mutateRate}, 0,1);
+	     },
+	     xoverSub=>sub {
+	       my $ga = shift;
+	       my ($moms,$dads) = selectps($ga->{parents}, $ga->{fitness});
+	       return $ga->{pop} = xover2($moms, $dads, $ga->{xoverRate});
+	     },
+	     keepSub=>sub {
+	       my $ga = shift;
+	       $ga->{pop}->dice_axis(-1,0) .= $ga->{parents}->dice_axis(-1,$ga->{fitness}->maximum_ind);
+	     },
+	    };
+}
+
+
+sub testga3 {
+  our $ngenes = 5 if (!defined($ngenes));
+  our $popsize = 10 if (!defined($popsize));
+
+  #our $mutateRate = 0.01;
+  #our $mutateRate = 0.1;
+  our $mutateRate = 0.25;
+
+  our $xoverRate  = 0.95;
+
+  our $pop = mutate_range(zeroes(float,$ngenes,$popsize), 1.0, 0,1);
+  our $ga = {
+	     pop=>$pop,
+	     mutateRate=>$mutateRate,
+	     xoverRate=>$xoverRate,
+	     ##
+	     fitnessSub=>sub {
+	       my $pop = $_[0]{pop};
+	       return (1+abs($pop->sumover-1))**-1;
+	     },
+	     mutateSub=>sub {
+	       my $ga = shift;
+	       mutate_range($ga->{pop}->inplace, $ga->{mutateRate}, 0,1);
+	     },
+	     xoverSub=>sub {
+	       my $ga = shift;
+	       my ($moms,$dads) = selectps($ga->{parents}, $ga->{fitness});
+	       return $ga->{pop} = xover2($moms, $dads, $ga->{xoverRate});
+	     },
+	     keepSub=>sub {
+	       my $ga = shift;
+	       $ga->{pop}->dice_axis(-1,0) .= $ga->{parents}->dice_axis(-1,$ga->{fitness}->maximum_ind);
+	     },
+	    };
+}
+
 
 sub selectps {
   my ($pop,$fitness) = @_;
@@ -232,6 +309,25 @@ sub generate {
   $ga->{keepSub}->($ga) if (defined($ga->{keepSub}));
 
   return $ga;
+}
+
+sub maxit1 {
+  $maxfitness = shift;
+  $maxfitness = 50 if (!defined($maxfitness));
+  testga1 if (!defined($ga));
+  for ($i=0; $i < 10000; $i++) {
+    generate();
+    last if ($ga->{fitness}->max >= $maxfitness);
+  }
+}
+
+sub maxit2 {
+  $maxgens = shift;
+  $maxgens = 500 if (!defined($maxgens));
+  testga2 if (!defined($ga));
+  for ($i=0; $i < $maxgens; $i++) {
+    generate();
+  }
 }
 
 
