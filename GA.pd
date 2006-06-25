@@ -135,7 +135,7 @@ returned as indices in the range [0,$M\( in the PDL $selindices().
 
 See also:
 roulette(),
-cweightselect(),
+cumuweightselect(),
 PDL::Primitive::vsearch(),
 PDL::Ufunc::cumusumover().
 
@@ -153,13 +153,13 @@ EOPM
 
 
 ##------------------------------------------------------
-## cweightselect() : weighted selection (cumulative)
-pp_add_exported('','cweightselect');
+## cumuweightselect() : weighted selection (cumulative)
+pp_add_exported('','cumuweightselect');
 pp_addpm(<<'EOPM');
 
 =pod
 
-=head2 cweightselect
+=head2 cumuweightselect
 
 =for sig
 
@@ -182,7 +182,7 @@ PDL::Ufunc::cumusumover().
 
 EOPM
 pp_addpm(<<'EOPM');
-sub cweightselect {
+sub cumuweightselect {
   #my ($cwmap,$selw,$seli) = splice(@_,0,2);
   return
     #$selw->vsearch($cwmap, @_);
@@ -191,43 +191,113 @@ sub cweightselect {
 EOPM
 
 ##======================================================================
-## Mutation
+## bits <-> integer type conversions
 
 ##------------------------------------------------------
-## mutate_bool() : logical (boolean) mutation
-pp_add_exported('','mutate_bool');
+## int->bits: tobits (safe)
+pp_add_exported('','tobits');
 pp_addpm(<<'EOPM');
 
 =pod
 
-=head2 mutate_bool
+=head2 tobits
 
 =for sig
 
-  Signature: (genes(G); float+ rate(G); [o]mutated(G))
+  Signature: (ints(); [o]bits(B))
 
-Mutate genes with boolean-valued features.
+Extract individual bits from integer type pdls.
+Output pdl will be created with appropriate dimensions if unspecified.
 
 =cut
 
 EOPM
 pp_addpm(<<'EOPM');
-sub mutate_bool {
-  my ($genes,$rate,$mutated) = @_;
-  if ($genes->is_inplace) {
-    $mutated = $genes;
-  } elsif (!defined($mutated)) {
-    $mutated = pdl($genes);
-  } else {
-    $mutated .= $genes;
-  }
-  my $mutate_i = (PDL->random($mutated->nelem) < $rate)->which;
-  if (!$mutate_i->isempty) {
-    $mutated->flat->index($mutate_i)->inplace->not();
-  }
-  return $mutated;
+sub tobits {
+  my ($ints,$bits) = @_;
+  $bits = zeroes($ints->type,8*PDL::howbig($ints->type),$ints->dims) if (!defined($bits));
+  _tobits($ints,$bits);
+  return $bits;
 }
 EOPM
+
+##------------------------------------------------------
+## int->bits: _tobits (requires output pdl)
+pp_add_exported('','_tobits');
+pp_def
+('_tobits',
+ Pars => 'a(); [o]bits(B)',
+ GenericTypes => [qw(B S U L)],
+ Code=>
+('
+  int i;
+  int nbits = 8*sizeof($GENERIC(a));
+  if (nbits > $SIZE(B)) nbits = $SIZE(B);
+  threadloop %{
+    for (i=0; i < nbits; i++) {
+      $bits(B=>i) = $a() & (1<<i);
+    }
+  %}
+'),
+  Doc=>
+('(Low-level method)
+
+Extract individual bits from integer type pdls.
+Output pdl $bits() must be specified!
+'),
+);
+
+##------------------------------------------------------
+## bits->int: frombits
+pp_add_exported('','frombits');
+pp_def
+('frombits',
+ Pars => 'bits(B); [o]a()',
+ GenericTypes => [qw(B S U L)],
+ Code=>
+('
+ int i;
+ int nbits = 8*sizeof($GENERIC(a));
+ $GENERIC(a) val;
+ if (nbits > $SIZE(B)) nbits = $SIZE(B);
+ threadloop %{
+   val = 0;
+   for (i=0; i < nbits; i++) {
+     if ($bits(B=>i)) { val |= (1<<i); }
+   }
+   $a() = val;
+ %}
+'),
+  Doc=>
+('Compress expanded bit-pdls to integer types.
+'),
+);
+
+
+
+##======================================================================
+## Mutation
+
+##------------------------------------------------------
+## mutate_bool() : logical (boolean) mutation
+pp_add_exported('','mutate_bool');
+pp_def
+('mutate_bool',
+ Pars => 'genes(G); float+ rate(G); [o]mutated(G)',
+ Inplace=>['genes'],
+ Code =>
+('
+ loop(G) %{
+   if (drand48() < $rate()) {
+     $mutated() = !$genes();
+   } else {
+     $mutated() = $genes();
+   }
+ %}
+'),
+  Doc =>
+  ('Mutate binary-valued (boolean) genes.'),
+);
 
 
 ##------------------------------------------------------
@@ -271,10 +341,38 @@ pp_def
 );
 
 
+
 ##------------------------------------------------------
-## mutate_bits() : bitwise mutation (integer types only!)
+## mutate_bits
+pp_add_exported('','mutate_bits');
+pp_addpm(<<'EOPM');
+
+=pod
+
+=head2 mutate_bits
+
+=for sig
+
+  Signature: (genes(G); rate(); [o]mutated(G))
+
+Mutate traditional bit-string genes.
+Calls mutate_bool(), tobits(), frombits().
+
+=cut
+
+EOPM
+pp_addpm(<<'EOPM');
+sub mutate_bits {
+  #my ($pop,$rate,$dst) = @_;
+  #return $pop->tobits->inplace->mutate_bool($rate)->frombits(defined($dst) ? $dst : qw());
+  return $_[0]->tobits->inplace->mutate_bool($_[1])->frombits(@_[2..$#_]);
+}
+EOPM
+
+##------------------------------------------------------
+## _mutate_bits() : bitwise mutation (integer types only!)
 pp_def
-('mutate_bits',
+('_mutate_bits',
  Pars => 'genes(G); float+ rate(G); [o]mutated(G)',
  GenericTypes => [qw(B S U L)],
  Inplace=>['genes'],
@@ -295,18 +393,25 @@ pp_def
  %}
 '),
   Doc =>
-  ('Mutate traditional bit-string genes.'),
+  ('(Low-level method)
+
+Mutate traditional bit-string genes.
+This should be equivalent to mutate_bits(), but appears to involve
+less overhead (faster for many calls).
+'),
 );
 
 
+
 ##======================================================================
-## Crossover
+## Crossover: low-level
 
 ##------------------------------------------------------
-## xover1() : single-point crossover
+## _xover1() : single-point crossover
 pp_def
-('xover1',
+('_xover1',
  Pars => 'mom(G); dad(G); int xpoint(); [o]kid(G)',
+ Inplace => ['mom'],
  Code =>
 ('
  int xat = $xpoint();
@@ -319,23 +424,27 @@ pp_def
  %}
 '),
   Doc =>
-  ('Single-point crossover.
+  ('(Low-level method)
+
+Single-point crossover.
 $kid() is computed by single-point crossover of $mom() (initial subsequence)
 and $dad() (final subsequence).  For symmetric crossover (two offspring per crossing),
 call this method twice:
 
-  $kid1 = xover1($mom, $dad, $points);
-  $kid2 = xover1($dad, $mom, $points);
+  $kid1 = _xover1($mom, $dad, $points);
+  $kid2 = _xover1($dad, $mom, $points);
 
 '),
 );
 
 
+
 ##------------------------------------------------------
-## xover2() : dual-point crossover
+## _xover2() : dual-point crossover
 pp_def
-('xover2',
+('_xover2',
  Pars => 'mom(G); dad(G); int xstart(); int xend(); [o]kid(G)',
+ Inplace => ['mom'],
  Code =>
 ('
  int xstartat = $xstart();
@@ -349,16 +458,97 @@ pp_def
  %}
 '),
   Doc =>
-  ('Dual-point crossover.
+  ('(Low-level method)
+
+Dual-point crossover.
 $kid() is computed by dual-point crossover of $mom() (initial and final subsequences)
 and $dad() (internal subsequence).  For symmetric crossover (two offspring per crossing),
 call this method twice:
 
-  $kid1 = xover2($mom, $dad, $points1, $points2);
-  $kid2 = xover2($dad, $mom, $points1, $points2);
+  $kid1 = _xover2($mom, $dad, $points1, $points2);
+  $kid2 = _xover2($dad, $mom, $points1, $points2);
 
 '),
 );
+
+##======================================================================
+## Crossover: high-level
+
+##------------------------------------------------------
+## xover1
+pp_add_exported('','xover1');
+pp_addpm(<<'EOPM');
+
+=pod
+
+=head2 xover1
+
+=for sig
+
+  Signature: (mom(G); dad(G); float+ rate(); [o]kid(G))
+
+Random single-point crossover.
+Calls _xover1().
+
+=cut
+
+EOPM
+pp_addpm(<<'EOPM');
+sub xover1 {
+  my ($mom, $dad, $rate, $kid) = @_;
+  my $xwhich = (PDL->random($mom->dim(1)) < $rate)->which;
+  if ($xwhich->isempty) {
+    return ($mom->is_inplace
+	    ? $mom
+	    : (defined($kid)
+	       ? ($kid .= $mom)
+	       : ($kid  = pdl($mom))));
+  }
+  my $xpoint = PDL->zeroes(long,$mom->dim(1)) + $mom->dim(0);
+  $xpoint->index($xwhich) .= PDL->random($xwhich->nelem)*($mom->dim(0)-1)+1;
+  return _xover1($mom,$dad, $xpoint, (defined($kid) ? $kid : qw()));
+}
+EOPM
+
+
+##------------------------------------------------------
+## xover2
+pp_add_exported('','xover2');
+pp_addpm(<<'EOPM');
+
+=pod
+
+=head2 xover2
+
+=for sig
+
+  Signature: (mom(G); dad(G); float+ rate(); [o]kid(G))
+
+Random dial-point crossover.
+Calls _xover2().
+
+=cut
+
+EOPM
+pp_addpm(<<'EOPM');
+sub xover2 {
+  my ($mom, $dad, $rate, $kid) = @_;
+  my $xwhich = (PDL->random($mom->dim(1)) < $rate)->which;
+  if ($xwhich->isempty) {
+    return ($mom->is_inplace
+	    ? $mom
+	    : (defined($kid)
+	       ? ($kid .= $mom)
+	       : ($kid  = pdl($mom))));
+  }
+  my $xpoint1 = PDL->zeroes(long,$mom->dim(1)) + $mom->dim(0);
+  $xpoint1->index($xwhich) .= PDL->random($xwhich->nelem)*($mom->dim(0)-1)+1;
+  my $xpoint2 = pdl($xpoint1);
+  $xpoint2->index($xwhich) += 1+PDL->random($xwhich->nelem)*($mom->dim(0)-$xpoint1->index($xwhich));
+  return _xover2($mom,$dad, $xpoint1, $xpoint2, (defined($kid) ? $kid : qw()));
+}
+EOPM
+
 
 
 ##======================================================================
