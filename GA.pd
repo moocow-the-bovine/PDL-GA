@@ -4,7 +4,7 @@
 ## Header Administrivia
 ##======================================================================
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 pp_setversion($VERSION);
 
 ##------------------------------------------------------
@@ -16,7 +16,7 @@ use strict;
 
 =head1 NAME
 
-PDL::GA - Genetic algorithm utilities for PDLs.
+PDL::GA - Genetic algorithm utilities for PDLs
 
 =head1 SYNOPSIS
 
@@ -49,29 +49,38 @@ pp_addhdr(<<'EOH');
 #include <stdlib.h>
 EOH
 
-
 ##======================================================================
 ## PDL::PP Wrappers
 ##======================================================================
 
 ##======================================================================
 ## Basic Utilities
-pp_addpm(<<'EOPM');
+#pp_addpm(<<'EOPM');
 #=pod
 #
 #=head1 Basic Utilities
 #
 #=cut
-EOPM
+#EOPM
 
 ##======================================================================
-## Convenience Methods
+## Weighted Selection
+
+pp_addpm(<<'EOPM');
+
+=pod
+
+=head1 Weighted Selection
+
+=cut
+
+EOPM
+
 
 ##------------------------------------------------------
 ## Roulette-wheel selection
 pp_add_exported('','roulette');
 pp_addpm(<<'EOPM');
-
 =pod
 
 =head2 roulette
@@ -84,13 +93,11 @@ pp_addpm(<<'EOPM');
     to => [o]selindices($n)
 
 Stochastic (roulette-wheel) selection of $n objects from
-$M objects, governed by the likelihood distribution $weightmap().
+$M objects, governed by the likelihood distribution $weightmap(), allowing repetitions.
 Calls PDL::Primitive::vsearch().
 
 =cut
 
-EOPM
-pp_addpm(<<'EOPM');
 sub roulette {
   my ($wmap,%opts) = @_;
   my ($seli);
@@ -108,11 +115,50 @@ sub roulette {
   $selw->vsearch($wmap->cumusumover, $seli);
   return $seli;
 }
+
 EOPM
 
 
-##======================================================================
-## Stochastic selection (roulette-wheel)
+##------------------------------------------------------
+## Roulette-wheel selection (no repetition)
+pp_add_exported('','roulette_nr');
+pp_addpm(<<'EOPM');
+=pod
+
+=head2 roulette_nr
+
+=for sig
+
+  Signature: (weightmap(M); %options)
+  Options:
+    n  => $n
+    to => [o]selindices($n)
+
+Stochastic (roulette-wheel) selection of $n objects from
+$M objects, governed by the likelihood distribution $weightmap(), without repetitions.
+Wrapper for cumuweighselect_nr.
+
+=cut
+
+sub roulette_nr {
+  my ($wmap,%opts) = @_;
+  my ($seli);
+  if (defined($opts{to})) {
+    $seli = $opts{to};
+  } elsif (defined($opts{n})) {
+    $seli = zeroes(long,$opts{n}) if (!defined($seli));
+    $seli->resize($opts{n})
+      if ($seli->ndims != 1 || $seli->dim(0) != $opts{n});
+  } else {
+    $seli = zeroes(long,1);
+  }
+  my $selw = PDL->random($seli->dims);
+  $selw   *= $wmap->sumover;
+  return cumuweightselect_nr($wmap->cumusumover, $selw, $seli);
+}
+
+EOPM
+
 
 ##------------------------------------------------------
 ## weightselect() : weighted selection
@@ -136,19 +182,49 @@ returned as indices in the range [0,$M\( in the PDL $selindices().
 See also:
 roulette(),
 cumuweightselect(),
+roulette_nr(),
+weightselect_nr(),
+cumuweightselect_nr(),
 PDL::Primitive::vsearch(),
 PDL::Ufunc::cumusumover().
 
 =cut
 
-EOPM
-pp_addpm(<<'EOPM');
 sub weightselect {
-  #my ($wmap,$selw,$seli) = splice(@_,0,2);
+  #my ($wmap,$selw,$seli) = @_;
   return
     #$selw->vsearch($wmap->cumusumover, @_);
     $_[1]->vsearch($_[0]->cumusumover, @_[2..$#_]);
 }
+
+EOPM
+
+
+##------------------------------------------------------
+## weightselect_nr() : weighted selection, no repetition
+pp_add_exported('','weightselect_nr');
+pp_addpm(<<'EOPM');
+
+=pod
+
+=head2 weightselect_nr
+
+=for sig
+
+  Signature: (weightmap(M); selweights(S); [o]selindices(S))
+
+Like weightselect() without repetition.
+Wraps cumuweightselect_nr().
+
+=cut
+
+sub weightselect_nr {
+  #my ($wmap,$selw,$seli) = @_;
+  return
+    #cumuweightselect_nr($wmap->cumusumover,$selw,$seli);
+    cumuweightselect_nr($_[0]->cumusumover, @_[1..$#_]);
+}
+
 EOPM
 
 
@@ -163,35 +239,129 @@ pp_addpm(<<'EOPM');
 
 =for sig
 
-  Signature: (weightmap(M); selweights(S); [o]selindices(S))
+  Signature: (cumuweightmap(M); selweights(S); int [o]selindices(S))
 
 Stochastically select $S objects from a pool $M objects, allowing repetitions.
-Cumulative likelihood selecting an object $i is given by $weightmap($i).  Target
+Cumulative likelihood selecting an object $i is given by $cumweightmap($i).  Target
 selection likelihoods are passed as $selweights(), which should have
-values in the range [0,sum($weightmap)\(.  Selected targets are
+values in the range [0,$cumuweightmap[-1]\(.  Selected targets are
 returned as indices in the range [0,$M\( in the PDL $selindices().
-Really just a wrapper for PDL::vsearch().
+Really just a wrapper for PDL::Primitive::vsearch().
 
 See also:
 roulette(),
 weightselect(),
+roulette_nr(),
+weightselect_nr(),
+cumuweightselect_nr(),
 PDL::Primitive::vsearch(),
 PDL::Ufunc::cumusumover().
 
 =cut
 
-EOPM
-pp_addpm(<<'EOPM');
 sub cumuweightselect {
   #my ($cwmap,$selw,$seli) = splice(@_,0,2);
   return
     #$selw->vsearch($cwmap, @_);
     $_[1]->vsearch($_[0], @_[2..$#_]);
 }
+
 EOPM
+
+
+##------------------------------------------------------
+## cumuweightselect_nr() : weighted selection (cumulative), no repeats
+pp_add_exported('','cumuweightselect_nr');
+pp_addpm(<<'EOPM');
+
+=pod
+
+=head2 cumuweightselect_nr
+
+=for sig
+
+  Signature: (cumuweightmap(M); selweights(S); int [o]selindices(S); int [t]trynext(M); byte [t]ignore(M))
+
+Stochastically select $S objects from a pool $M objects, without repetitions.
+Really just a wrapper for PDL::Primitive::vesarch() and ga_make_unique().
+
+=cut
+
+sub cumuweightselect_nr {
+  my ($cwmap,$selw,$seli,$try,$ignore) = @_;
+  $seli = zeroes(long,$selw->dims) if (!defined($seli));
+  $selw->vsearch($cwmap, $seli);
+  $try  = 1+PDL->sequence(long,$cwmap->dim(0)) if (!defined($try));
+  $seli->inplace->ga_make_unique($try, (defined($ignore) ? $ignore : qw()));
+  return $seli;
+}
+
+EOPM
+
+##------------------------------------------------------
+## ga_make_unique() : make an integer-set unique
+pp_add_exported('','ga_make_unique');
+pp_def
+('ga_make_unique',
+ Pars => 'int selected(S); int trynext(M); int [o]unique_selected(S); byte [t]ignore(M)',
+ Inplace=>['selected','unique_selected'],
+ HandleBad=>1,
+ Code =>
+q(
+ long s_max = $SIZE(S)-1;
+ long m_max = $SIZE(M)-1;
+ long i_items;
+ long item, ntried;
+ /*-- sanity check --*/
+ if ($SIZE(S) > $SIZE(M)) {
+   barf("PDL::GA::ga_make_unique(): too many selections requested (S > M)");
+ }
+ threadloop %{
+   loop (M) %{ $ignore() = 0; %} /*-- initially, all choices are open --*/
+   loop (S) %{
+     long item0 = $selected();
+     if ( $ISGOODVAR(item0,selected) ) {
+       for (ntried=0,item=item0; $ignore(M=>item) && ntried < $SIZE(M); ntried++) {
+	 item = $trynext(M=>item);
+	 if ( $ISBADVAR(item,trynext) ) { break; }
+	 item %= $SIZE(M);
+	 if (item < 0) item += $SIZE(M);
+	 if (item==item0) break;  /*-- loop detected --*/
+       }
+       if ( $ISGOODVAR(item,selected) ) {
+	 $ignore(M=>item)   = 1;
+       }
+     } else { item = item0; }
+     $unique_selected() = item;
+   %}
+ %}
+),
+ Doc=>
+q(
+Remove repetitions from a vector of selected items $selected() while retaining vector length.
+$selected() should have values in the range [0..($M-1)], and it must be the case
+that $S <= $M.
+The vector $trynext() is used to (iteratively) map a non-unique item to the "next-best" item,
+and are implicitly interpreted modulo $M.
+The temporary $ignore is used to record which items have already appeared.
+May be run in-place on $selected().
+Generally, $trynext() should be something like 1+sequence($M).
+),
+ );
+
 
 ##======================================================================
 ## bits <-> integer type conversions
+
+pp_addpm(<<'EOPM');
+
+=pod
+
+=head1 Gene Encoding and Decoding
+
+=cut
+
+EOPM
 
 ##------------------------------------------------------
 ## int->bits: tobits (safe)
@@ -208,17 +378,17 @@ pp_addpm(<<'EOPM');
 
 Extract individual bits from integer type pdls.
 Output pdl will be created with appropriate dimensions if unspecified.
+Serious waste of memory, since PDL does not have a 'bit' type.
 
 =cut
 
-EOPM
-pp_addpm(<<'EOPM');
 sub tobits {
   my ($ints,$bits) = @_;
   $bits = zeroes($ints->type,8*PDL::howbig($ints->type),$ints->dims) if (!defined($bits));
   _tobits($ints,$bits);
   return $bits;
 }
+
 EOPM
 
 ##------------------------------------------------------
@@ -277,6 +447,16 @@ pp_def
 
 ##======================================================================
 ## Mutation
+
+pp_addpm(<<'EOPM');
+
+=pod
+
+=head1 Mutation
+
+=cut
+
+EOPM
 
 ##------------------------------------------------------
 ## mutate_bool() : logical (boolean) mutation
@@ -360,13 +540,12 @@ Calls mutate_bool(), tobits(), frombits().
 
 =cut
 
-EOPM
-pp_addpm(<<'EOPM');
 sub mutate_bits {
   #my ($pop,$rate,$dst) = @_;
   #return $pop->tobits->inplace->mutate_bool($rate)->frombits(defined($dst) ? $dst : qw());
   return $_[0]->tobits->inplace->mutate_bool($_[1])->frombits(@_[2..$#_]);
 }
+
 EOPM
 
 ##------------------------------------------------------
@@ -405,6 +584,17 @@ less overhead (faster for many calls).
 
 ##======================================================================
 ## Crossover: low-level
+
+pp_addpm(<<'EOPM');
+
+=pod
+
+=head1 Crossover
+
+=cut
+
+EOPM
+
 
 ##------------------------------------------------------
 ## _xover1() : single-point crossover
@@ -492,8 +682,6 @@ Calls _xover1().
 
 =cut
 
-EOPM
-pp_addpm(<<'EOPM');
 sub xover1 {
   my ($mom, $dad, $rate, $kid) = @_;
   my $xwhich = (PDL->random($mom->dim(1)) < $rate)->which;
@@ -508,6 +696,7 @@ sub xover1 {
   $xpoint->index($xwhich) .= PDL->random($xwhich->nelem)*($mom->dim(0)-1)+1;
   return _xover1($mom,$dad, $xpoint, (defined($kid) ? $kid : qw()));
 }
+
 EOPM
 
 
@@ -529,8 +718,6 @@ Calls _xover2().
 
 =cut
 
-EOPM
-pp_addpm(<<'EOPM');
 sub xover2 {
   my ($mom, $dad, $rate, $kid) = @_;
   my $xwhich = (PDL->random($mom->dim(1)) < $rate)->which;
@@ -547,8 +734,8 @@ sub xover2 {
   $xpoint2->index($xwhich) += 1+PDL->random($xwhich->nelem)*($mom->dim(0)-$xpoint1->index($xwhich));
   return _xover2($mom,$dad, $xpoint1, $xpoint2, (defined($kid) ? $kid : qw()));
 }
-EOPM
 
+EOPM
 
 
 ##======================================================================
@@ -589,7 +776,7 @@ Bryan Jurish E<lt>moocow@ling.uni-potsdam.deE<gt>
 
 =head2 Copyright Policy
 
-Copyright (C) 2006, Bryan Jurish. All rights reserved.
+Copyright (C) 2006-2007, Bryan Jurish. All rights reserved.
 
 This package is free software, and entirely without warranty.
 You may redistribute it and/or modify it under the same terms

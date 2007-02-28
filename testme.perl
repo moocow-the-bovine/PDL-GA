@@ -30,7 +30,7 @@ sub wsel {
 sub wsel_eval_basic {
   our ($wmap,$indices);
   our $wprob = flat($wmap / $wmap->flat->sumover);
-  our $whist = hist($indices,0,$wmap->nelem,1);
+  our $whist = hist($indices->flat, 0, $wmap->nelem, 1);
   our $whistp = $whist->convert(float) / $whist->sumover;
 }
 sub wsel_eval {
@@ -40,9 +40,9 @@ sub wsel_eval {
 sub wsel_plot {
   wsel_eval_basic;
   our ($wmap,$indices);
-  line($wprob,{COLOR=>'blue'});
-  hold();
   line($whistp,{COLOR=>'red'});
+  hold();
+  line($wprob,{COLOR=>'blue'});
   release();
 }
 sub wsel_plot_error {
@@ -62,6 +62,47 @@ sub rsel {
   our $indices = roulette($wmap,n=>$nsel);
   #wsel_eval();
 }
+
+
+##---------------------------------------------------------------------
+## repetition removal
+
+sub test_make_unique {
+  our $S = 3;
+  our $M = 4;
+  our $indices = pdl(long,[0,1,1]);
+  our $try     = sequence(long,$M)+1;             ##-- increment-map
+  #our $try     = sequence(long,$M)-1;             ##-- decrement-map
+  #our $try     = sequence(long,$M)-2;             ##-- double-decrement-map
+  #our $try     = zeroes(long,$M);                 ##-- constant-map: loop $M times & map second "1" to "0"
+  #our $try     = sequence(long,$M);              ##-- identity-map: try & fail once, map second "1" to "1"
+  #our $try     = zeroes(long,$M)->setvaltobad(0); ##-- bad values: map duplicates to 'BAD'
+  our $uindices = ga_make_unique($indices,$try);
+}
+#test_make_unique();
+
+
+##---------------------------------------------------------------------
+## Selection, no repeats
+
+sub wdata_nr {
+  our $wmap    = sequence(double,100) if (!defined($wmap));
+  our $cwmap   = $wmap->cumusumover;
+  our $niter   = 10 if (!defined($niter)); ##-- outer: number of selection iterations
+  our $nsel    = 10 if (!defined($nsel));  ##-- inner: number of selections per iteration
+                                           ##   (*select_nr() methods don't within $nsel)
+  our $wsel    = random($nsel,$niter) * $cwmap->at(-1);
+  our $indices = zeroes(long,$nsel,$niter);
+}
+wdata_nr();
+
+sub plot_cumuweightselect_nr {
+  wdata_nr;
+  $indices = cumuweightselect_nr($cwmap, $wsel);
+  wsel_eval_basic;
+  wsel_plot;
+}
+
 
 ##---------------------------------------------------------------------
 ## Mutation
@@ -334,6 +375,6 @@ sub maxit2 {
 ##---------------------------------------------------------------------
 ## DUMMY
 ##---------------------------------------------------------------------
-foreach $i (0..10) {
+foreach $i (0..3) {
   print "--dummy($i)--\n";
 }
