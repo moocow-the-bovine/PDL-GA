@@ -1,0 +1,92 @@
+##------------------------------------------------------
+## ga_make_unique() : make an integer-set unique
+#pp_add_exported('','make_unique');
+pp_def
+('make_unique',
+ Pars => 'int selindices(S); int trynext(M); int [o]unique_selindices(S); byte [t]ignore(M)',
+ #Inplace=>['selindices','unique_selindices'],
+ Code =>
+q(
+ long s_max = $SIZE(S)-1;
+ long m_max = $SIZE(M)-1;
+ long i_items;
+ long item;
+ /*-- sanity check --*/
+ if ($SIZE(S) > $SIZE(M)) {
+   barf("PDL::GA::make_unique(): too many selections requested (S > M)");
+ }
+ threadloop %{
+   loop (M) %{ $ignore() = 0; %} /*-- initially, all choices are open --*/
+   loop (S) %{
+     long item0 = selindices();
+     for (item=item0 ; $ignore(M=>item); ) {
+       item = $trynext(M=>item) % $SIZE(M);
+       if (item==item0) break;  /*-- loop detected --*/
+     }
+     $ignore(M=>item)   = 1;
+     $unique_selindices() = item;
+   %}
+ %}
+),
+ Doc=>
+q(
+Remove repetitions from a vector of selected items $selindices() while retaining vector length.
+$selindices() should have values in the range [0..($M-1)], and it must be the case
+that $S <= $M.
+The vector $trynext() is used to (iteratively) map a non-unique item to the "next-best" item,
+and are implicitly interpreted modulo $M.
+The temporary $ignore is used to record which items have already appeared.
+May be run in-place on $selindices().
+Generally, $trynext() should be something like 1+sequence($M).
+),
+ );
+
+##------------------------------------------------------
+## cumuweightselect_nr() : weighted selection, no repeats (cumulative)
+pp_add_exported('','_cumuweightselect_nr');
+pp_def
+('_cumuweightselect_nr',
+ Pars => 'cumuweightmap(M); selweights(S); int [o]selindices(S); byte [t]ignore(M)',
+ Code =>
+q(
+ long mi_max = $SIZE(M)-1;
+ /*-- sanity check --*/
+ if ($SIZE(S) > $SIZE(M)) {
+   barf("PDL::GA::cumuweightselect_nr(): too many selections requested (S > M)");
+ }
+ threadloop %{
+   loop (M) %{ $ignore() = 0; %} /*-- initially, all choices are open --*/
+   loop (S) %{
+     $GENERIC(selweights) sw = $selweights();
+     long mi_s, mi_i;
+     /*-- weighted search --*/
+     for (mi_s=0   ; sw > $cumuweightmap(M=>mi_s) && mi_s < mi_max; mi_s++) {;}
+     /*-- ignore repeats --*/
+     for (mi_i=mi_s; $ignore(M=>mi_i); ) {
+       mi_i = (mi_i+1) % $SIZE(M);
+       if (mi_i==mi_s) { mi_i = mi_max;  break; } /*-- loop detected --*/
+     }
+     /*-- output --*/
+     $ignore(M=>mi_i) = 1;
+     $selindices()   = mi_i;
+   %}
+ %}
+),
+ Doc=>
+q(
+Stochastically select $S objects from a pool $M objects, without repetitions ($S <= $M).
+Cumulative likelihood selecting an object $i is given by $cumweightmap($i).  Target
+selection likelihoods are passed as $selweights(), which should have
+values in the range [0,$cumuweightmap[-1]\(.  Selected targets are
+returned as indices in the range [0,$M\( in the PDL $selindices().
+$ignore is used in the course of the computation to mark selected indices.
+
+See also:
+roulette(),
+weightselect(),
+cumuweightselect(),
+roulette_nr(),
+weightselect_nr().
+
+),
+ );
