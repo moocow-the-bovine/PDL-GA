@@ -4,7 +4,7 @@ README for PDL::GA
 
 =head1 ABSTRACT
 
-PDL::EditDistance - Genetic algorithm utilities for PDL
+PDL::GA - Genetic algorithm utilities for PDL
 
 =head1 REQUIREMENTS
 
@@ -18,7 +18,7 @@ Tested version 2.4.2.
 
 =head1 DESCRIPTION
 
-PDL::EditDistance provides some utilities for running genetic algorithms
+PDL::GA provides some basic utilities for running genetic algorithms
 on PDLs.
 
 =head1 BUILDING
@@ -41,7 +41,7 @@ Bryan Jurish E<lt>jurish@ling.uni-potsdam.deE<gt>
 
 =head1 COPYRIGHT
 
-Copyright (c) 2006, Bryan Jurish.  All rights reserved.
+Copyright (c) 2006-2007, Bryan Jurish.  All rights reserved.
 
 This package is free software, and entirely without warranty.
 You may redistribute it and/or modify it under the same terms
