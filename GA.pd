@@ -4,7 +4,7 @@
 ## Header Administrivia
 ##======================================================================
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 pp_setversion($VERSION);
 
 ##------------------------------------------------------
@@ -104,14 +104,15 @@ sub roulette {
   if (defined($opts{to})) {
     $seli = $opts{to};
   } elsif (defined($opts{n})) {
-    $seli = zeroes(long,$opts{n}) if (!defined($seli));
-    $seli->resize($opts{n})
-      if ($seli->ndims != 1 || $seli->dim(0) != $opts{n});
+    $seli = zeroes(long, (($wmap->dims)[1..($wmap->ndims-1)]), $opts{n}) if (!defined($seli));
+    $seli->resize((($wmap->dims)[1..($wmap->ndims-1)]), $opts{n})
+      if ($seli->ndims != $wmap->ndims || $seli->dim(-1) != $opts{n});
   } else {
     $seli = zeroes(long,1);
   }
-  my $selw = PDL->random($seli->nelem);
-  $selw *= $wmap->sumover;
+  my $wsum = $wmap->sumover->slice(',*1');
+  my $selw = PDL->random($seli->dims);
+  $selw *= $wsum;
   $selw->vsearch($wmap->cumusumover, $seli);
   return $seli;
 }
@@ -146,14 +147,15 @@ sub roulette_nr {
   if (defined($opts{to})) {
     $seli = $opts{to};
   } elsif (defined($opts{n})) {
-    $seli = zeroes(long,$opts{n}) if (!defined($seli));
-    $seli->resize($opts{n})
-      if ($seli->ndims != 1 || $seli->dim(0) != $opts{n});
+    $seli = zeroes(long, (($wmap->dims)[1..($wmap->ndims-1)]), $opts{n}) if (!defined($seli));
+    $seli->resize((($wmap->dims)[1..($wmap->ndims-1)]), $opts{n})
+      if ($seli->ndims != $wmap->ndims || $seli->dim(-1) != $opts{n});
   } else {
     $seli = zeroes(long,1);
   }
+  my $wsum = $wmap->sumover->slice(',*1');
   my $selw = PDL->random($seli->dims);
-  $selw   *= $wmap->sumover;
+  $selw *= $wsum;
   return cumuweightselect_nr($wmap->cumusumover, $selw, $seli);
 }
 
