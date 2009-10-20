@@ -4,8 +4,17 @@
 ## Header Administrivia
 ##======================================================================
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 pp_setversion($VERSION);
+
+##------------------------------------------------------
+## bad hacks
+require PDL::Bad;
+sub ISBAD     { return $PDL::Bad::Status ? ("\$ISBAD(".join(',',@_).")") : '0 /* ISBAD(): no bad support available */'; }
+sub ISBADVAR  { return $PDL::Bad::Status ? ("\$ISBADVAR(".join(',',@_).")") : '0 /* ISBADVAR(): no bad support available */'; }
+
+sub ISGOOD    { return $PDL::Bad::Status ? ("\$ISGOOD(".join(',',@_).")") : '1 /* ISGOOD(): no bad support available */'; }
+sub ISGOODVAR { return $PDL::Bad::Status ? ("\$ISGOODVAR(".join(',',@_).")") : '1 /* ISGOODVAR(): no bad support available */'; }
 
 ##------------------------------------------------------
 ## pm additions
@@ -309,7 +318,7 @@ pp_def
  Inplace=>['selected','unique_selected'],
  HandleBad=>1,
  Code =>
-q(
+'
  long s_max = $SIZE(S)-1;
  long m_max = $SIZE(M)-1;
  long i_items;
@@ -322,22 +331,22 @@ q(
    loop (M) %{ $ignore() = 0; %} /*-- initially, all choices are open --*/
    loop (S) %{
      long item0 = $selected();
-     if ( $ISGOODVAR(item0,selected) ) {
+     if ( '.ISGOODVAR('item0,selected').' ) {
        for (ntried=0,item=item0; $ignore(M=>item) && ntried < $SIZE(M); ntried++) {
 	 item = $trynext(M=>item);
-	 if ( $ISBADVAR(item,trynext) ) { break; }
+	 if ( '.ISBADVAR('item,trynext').' ) { break; }
 	 item %= $SIZE(M);
 	 if (item < 0) item += $SIZE(M);
 	 if (item==item0) break;  /*-- loop detected --*/
        }
-       if ( $ISGOODVAR(item,selected) ) {
+       if ( '.ISGOODVAR(item,selected).' ) {
 	 $ignore(M=>item)   = 1;
        }
      } else { item = item0; }
      $unique_selected() = item;
    %}
  %}
-),
+',
  Doc=>
 q(
 Remove repetitions from a vector of selected items $selected() while retaining vector length.
