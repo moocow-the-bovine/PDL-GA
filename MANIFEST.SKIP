@@ -1,4 +1,6 @@
 ~$
+\.svn
+\.gz$
 \.bs$
 \.o$
 \.old$
@@ -14,7 +16,7 @@
 ^GA.pm$
 ^GA.xs$
 ^GA.c$
-^README\.pod$
+^README\.(?:r?)pod$
 \.html$
 \.tmp$
 ^#Makefile#$

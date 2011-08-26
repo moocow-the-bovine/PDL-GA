@@ -35,7 +35,7 @@ sub MY::special_targets {
   #$inherited =~ s/^(\.SUFFIXES\s*:.*)$/$1 .pod .pm .man .txt .html;/
   $inherited .=
 "
-.SUFFIXES: .pm .pod .man .txt .html
+.SUFFIXES: .pm .pod .rpod .man .txt .html
 
 .pm.html:
 \tpod2html --outfile \$@ \$<
@@ -46,7 +46,13 @@ sub MY::special_targets {
 .pod.html:
 \tpod2html --outfile \$@ \$<
 
-.pod.txt: README.pod
+.pod.txt:
+\tpod2text \$< \$@
+
+.rpod.html:
+\tpod2html --outfile \$@ \$<
+
+.rpod.txt:
 \tpod2text \$< \$@
 
 #README.html: README.pod
