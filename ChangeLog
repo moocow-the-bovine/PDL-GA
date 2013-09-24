@@ -1,3 +1,7 @@
+v0.06 Tue, 24 Sep 2013 13:59:55 +0200
+	* set PREREQ_PM{PDL}=CONFIGURE_REQUIRES{PDL}=0 for cpan-testers friendliness
+	* added support for PDL_Indx type (PDL >= v2.007)
+
 v0.05 Mon, 02 Jan 2012 13:15:14 +0100 moocow
 	* added pdlmaker.plm for cpan-friendly distribution
 

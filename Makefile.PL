@@ -8,7 +8,10 @@ $package = ["GA.pd",GA,PDL::GA];
 
 $hash{AUTHOR} = 'Bryan Jurish';
 $hash{ABSTRACT} = 'Genetic algorithm utilities for PDL';
-$hash{PREREQ_PM}{PDL} = '2.4.2'; ##-- ensure PDL-ability
+
+$hash{PREREQ_PM} = {PDL=>0};
+$hash{CONFIGURE_REQUIRES} = {PDL=>0,'ExtUtils::MakeMaker'=>0};
+
 push(@{$hash{LIBS}}, '-lm');
 #$hash{INC} .= '';
 $hash{DIR} = [];

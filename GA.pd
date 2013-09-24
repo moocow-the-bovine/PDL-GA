@@ -4,7 +4,7 @@
 ## Header Administrivia
 ##======================================================================
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 pp_setversion($VERSION);
 
 ##------------------------------------------------------
@@ -15,6 +15,25 @@ sub ISBADVAR  { return $PDL::Bad::Status ? ("\$ISBADVAR(".join(',',@_).")") : '0
 
 sub ISGOOD    { return $PDL::Bad::Status ? ("\$ISGOOD(".join(',',@_).")") : '1 /* ISGOOD(): no bad support available */'; }
 sub ISGOODVAR { return $PDL::Bad::Status ? ("\$ISGOODVAR(".join(',',@_).")") : '1 /* ISGOODVAR(): no bad support available */'; }
+
+##------------------------------------------------------
+## index-type hacks
+require PDL::Core;
+my ($INDX);
+if (defined(&PDL::indx)) {
+  #print STDERR "PDL >= v2.007 detected : using built-in PDL_Indx type\n";
+  $INDX = 'indx';
+  pp_addhdr("/* No PDL_Indx typedef needed for PDL >= v2.007 */\n");
+  pp_addpm("*ga_indx = \&PDL::indx;\n");
+} else {
+  #print STDERR "PDL < v2.007 detected : using hacked PDL_Indx type\n";
+  $INDX = 'int';
+  $pindx = 'long';
+  pp_addhdr("/* PDL_Indx typedef hack for PDL < v2.007 */\n"
+	    ."typedef int PDL_Indx;\n"
+	   );
+  pp_addpm("*ga_indx = \&PDL::long;\n");
+}
 
 ##------------------------------------------------------
 ## pm additions
@@ -113,11 +132,11 @@ sub roulette {
   if (defined($opts{to})) {
     $seli = $opts{to};
   } elsif (defined($opts{n})) {
-    $seli = zeroes(long, (($wmap->dims)[1..($wmap->ndims-1)]), $opts{n}) if (!defined($seli));
+    $seli = zeroes(ga_indx(), (($wmap->dims)[1..($wmap->ndims-1)]), $opts{n}) if (!defined($seli));
     $seli->resize((($wmap->dims)[1..($wmap->ndims-1)]), $opts{n})
       if ($seli->ndims != $wmap->ndims || $seli->dim(-1) != $opts{n});
   } else {
-    $seli = zeroes(long,1);
+    $seli = zeroes(ga_indx(),1);
   }
   my $wsum = $wmap->sumover->slice(',*1');
   my $selw = PDL->random($seli->dims);
@@ -156,11 +175,11 @@ sub roulette_nr {
   if (defined($opts{to})) {
     $seli = $opts{to};
   } elsif (defined($opts{n})) {
-    $seli = zeroes(long, (($wmap->dims)[1..($wmap->ndims-1)]), $opts{n}) if (!defined($seli));
+    $seli = zeroes(ga_indx(), (($wmap->dims)[1..($wmap->ndims-1)]), $opts{n}) if (!defined($seli));
     $seli->resize((($wmap->dims)[1..($wmap->ndims-1)]), $opts{n})
       if ($seli->ndims != $wmap->ndims || $seli->dim(-1) != $opts{n});
   } else {
-    $seli = zeroes(long,1);
+    $seli = zeroes(ga_indx(),1);
   }
   my $wsum = $wmap->sumover->slice(',*1');
   my $selw = PDL->random($seli->dims);
@@ -250,7 +269,7 @@ pp_addpm(<<'EOPM');
 
 =for sig
 
-  Signature: (cumuweightmap(M); selweights(S); int [o]selindices(S))
+  Signature: (cumuweightmap(M); selweights(S); indx [o]selindices(S))
 
 Stochastically select $S objects from a pool $M objects, allowing repetitions.
 Cumulative likelihood selecting an object $i is given by $cumweightmap($i).  Target
@@ -291,7 +310,7 @@ pp_addpm(<<'EOPM');
 
 =for sig
 
-  Signature: (cumuweightmap(M); selweights(S); int [o]selindices(S); int [t]trynext(M); byte [t]ignore(M))
+  Signature: (cumuweightmap(M); selweights(S); indx [o]selindices(S); indx [t]trynext(M); byte [t]ignore(M))
 
 Stochastically select $S objects from a pool $M objects, without repetitions.
 Really just a wrapper for PDL::Primitive::vesarch() and ga_make_unique().
@@ -300,9 +319,9 @@ Really just a wrapper for PDL::Primitive::vesarch() and ga_make_unique().
 
 sub cumuweightselect_nr {
   my ($cwmap,$selw,$seli,$try,$ignore) = @_;
-  $seli = zeroes(long,$selw->dims) if (!defined($seli));
+  $seli = zeroes(ga_indx(),$selw->dims) if (!defined($seli));
   $selw->vsearch($cwmap, $seli);
-  $try  = 1+PDL->sequence(long,$cwmap->dim(0)) if (!defined($try));
+  $try  = 1+PDL->sequence(ga_indx(),$cwmap->dim(0)) if (!defined($try));
   $seli->inplace->ga_make_unique($try, (defined($ignore) ? $ignore : qw()));
   return $seli;
 }
@@ -314,15 +333,15 @@ EOPM
 pp_add_exported('','ga_make_unique');
 pp_def
 ('ga_make_unique',
- Pars => 'int selected(S); int trynext(M); int [o]unique_selected(S); byte [t]ignore(M)',
+ Pars => "$INDX selected(S); int trynext(M); $INDX \[o]unique_selected(S); byte [t]ignore(M)",
  Inplace=>['selected','unique_selected'],
  HandleBad=>1,
  Code =>
 '
- long s_max = $SIZE(S)-1;
- long m_max = $SIZE(M)-1;
- long i_items;
- long item, ntried;
+ PDL_Indx s_max = $SIZE(S)-1;
+ PDL_Indx m_max = $SIZE(M)-1;
+ PDL_Indx i_items;
+ PDL_Indx item, ntried;
  /*-- sanity check --*/
  if ($SIZE(S) > $SIZE(M)) {
    barf("PDL::GA::ga_make_unique(): too many selections requested (S > M)");
@@ -330,7 +349,7 @@ pp_def
  threadloop %{
    loop (M) %{ $ignore() = 0; %} /*-- initially, all choices are open --*/
    loop (S) %{
-     long item0 = $selected();
+     PDL_Indx item0 = $selected();
      if ( '.ISGOODVAR('item0,selected').' ) {
        for (ntried=0,item=item0; $ignore(M=>item) && ntried < $SIZE(M); ntried++) {
 	 item = $trynext(M=>item);
@@ -404,11 +423,14 @@ EOPM
 
 ##------------------------------------------------------
 ## int->bits: _tobits (requires output pdl)
+require PDL::Types;
+my @pdlpp_integer_typechars = grep {/^(?:[BSULQN]|LL|US)$/} map {$_->{ppsym}} values %PDL::Types::typehash;
+
 pp_add_exported('','_tobits');
 pp_def
 ('_tobits',
  Pars => 'a(); [o]bits(B)',
- GenericTypes => [qw(B S U L)],
+ GenericTypes => \@pdlpp_integer_typechars,
  Code=>
 ('
   int i;
@@ -434,7 +456,7 @@ pp_add_exported('','frombits');
 pp_def
 ('frombits',
  Pars => 'bits(B); [o]a()',
- GenericTypes => [qw(B S U L)],
+ GenericTypes => \@pdlpp_integer_typechars,
  Code=>
 ('
  int i;
@@ -564,7 +586,7 @@ EOPM
 pp_def
 ('_mutate_bits',
  Pars => 'genes(G); float+ rate(G); [o]mutated(G)',
- GenericTypes => [qw(B S U L)],
+ GenericTypes => \@pdlpp_integer_typechars,
  Inplace=>['genes'],
  Code =>
 ('
@@ -611,11 +633,11 @@ EOPM
 ## _xover1() : single-point crossover
 pp_def
 ('_xover1',
- Pars => 'mom(G); dad(G); int xpoint(); [o]kid(G)',
+ Pars => "mom(G); dad(G); $INDX xpoint(); [o]kid(G)",
  Inplace => ['mom'],
  Code =>
 ('
- int xat = $xpoint();
+ PDL_Indx xat = $xpoint();
  loop(G) %{
    if (G < xat) {
      $kid() = $mom();
@@ -644,12 +666,12 @@ call this method twice:
 ## _xover2() : dual-point crossover
 pp_def
 ('_xover2',
- Pars => 'mom(G); dad(G); int xstart(); int xend(); [o]kid(G)',
+ Pars => "mom(G); dad(G); $INDX xstart(); int xend(); [o]kid(G)",
  Inplace => ['mom'],
  Code =>
 ('
- int xstartat = $xstart();
- int xendat   = $xend();
+ PDL_Indx xstartat = $xstart();
+ PDL_Indx xendat   = $xend();
  loop(G) %{
    if (G < xstartat || G >= xendat) {
      $kid() = $mom();
@@ -703,7 +725,7 @@ sub xover1 {
 	       ? ($kid .= $mom)
 	       : ($kid  = pdl($mom))));
   }
-  my $xpoint = PDL->zeroes(long,$mom->dim(1)) + $mom->dim(0);
+  my $xpoint = PDL->zeroes(ga_indx(),$mom->dim(1)) + $mom->dim(0);
   $xpoint->index($xwhich) .= PDL->random($xwhich->nelem)*($mom->dim(0)-1)+1;
   return _xover1($mom,$dad, $xpoint, (defined($kid) ? $kid : qw()));
 }
@@ -739,7 +761,7 @@ sub xover2 {
 	       ? ($kid .= $mom)
 	       : ($kid  = pdl($mom))));
   }
-  my $xpoint1 = PDL->zeroes(long,$mom->dim(1)) + $mom->dim(0);
+  my $xpoint1 = PDL->zeroes(ga_indx(),$mom->dim(1)) + $mom->dim(0);
   $xpoint1->index($xwhich) .= PDL->random($xwhich->nelem)*($mom->dim(0)-1)+1;
   my $xpoint2 = pdl($xpoint1);
   $xpoint2->index($xwhich) += 1+PDL->random($xwhich->nelem)*($mom->dim(0)-$xpoint1->index($xwhich));
