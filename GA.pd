@@ -4,7 +4,7 @@
 ## Header Administrivia
 ##======================================================================
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 pp_setversion($VERSION);
 
 ##------------------------------------------------------
@@ -66,8 +66,13 @@ pp_export_nothing();
 
 ##------------------------------------------------------
 ## Includes / defines
-#pp_addhdr(<<'EOH');
-#EOH
+require Config; ##-- perl configuration, for drand01 macro
+pp_addhdr(<<"EOH");
+
+/*-- Macro to be used to generate normalized random numbers --*/
+#define GA_RAND01() $Config::Config{drand01}
+
+EOH
 
 ##======================================================================
 ## C Utilities
@@ -501,7 +506,7 @@ pp_def
  Code =>
 ('
  loop(G) %{
-   if (drand48() < $rate()) {
+   if (GA_RAND01() < $rate()) {
      $mutated() = !$genes();
    } else {
      $mutated() = $genes();
@@ -522,8 +527,8 @@ pp_def
  Code =>
 ('
  loop(G) %{
-   if (drand48() < $rate()) {
-     $mutated() = $min() + drand48()*($max()-$min());
+   if (GA_RAND01() < $rate()) {
+     $mutated() = $min() + GA_RAND01()*($max()-$min());
    } else {
      $mutated() = $genes();
    }
@@ -542,8 +547,8 @@ pp_def
  Code =>
 ('
  loop(G) %{
-   if (drand48() < $rate()) {
-     $mutated()  = $genes() + $min() + drand48()*($max()-$min());
+   if (GA_RAND01() < $rate()) {
+     $mutated()  = $genes() + $min() + GA_RAND01()*($max()-$min());
    } else {
      $mutated()  = $genes();
    }
@@ -596,7 +601,7 @@ pp_def
    int i;
    for (i=0; i < 8*sizeof($GENERIC(genes)); i++) {
      int mask = 1<<i;
-     if (drand48() < mrate) {
+     if (GA_RAND01() < mrate) {
        if (gene & mask) { gene &= ~mask; }
        else             { gene |=  mask; }
      }
