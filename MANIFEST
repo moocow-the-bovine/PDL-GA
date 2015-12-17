@@ -6,6 +6,5 @@ pdlmaker.plm
 GA.pd		# GA.pm
 GA.pm
 README.txt
-t/common.plt
 t/00_basic.t
 
