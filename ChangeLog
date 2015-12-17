@@ -1,3 +1,6 @@
+v0.08-pre Thu, 17 Dec 2015 12:08:07 +0100 moocow
+	* pdlmaker.plm doesn't distribute generated PM files any more (PDL now does this for us)
+
 v0.07 Thu, 26 Sep 2013 13:44:08 +0200 moocow
 	* use $Config{drand01} macro instead of drand48() directly
 	  - avoid errors like `GA.o:GA.c:(.text+0x137ae): undefined reference to `drand48''
